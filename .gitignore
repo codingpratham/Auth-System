@@ -1,0 +1,7 @@
+tsconfig.tsbuildinfo
+/src/generated/prisma
+.env
+prisma/migrations
+dist
+node_modules
+
