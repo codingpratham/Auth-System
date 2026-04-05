@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { prisma } from "../utils/prisma.js";
+import rateLimit from "express-rate-limit";
 
 declare module "express" {
   interface Request {
@@ -38,3 +39,11 @@ export const AuthMiddleware = async (
     });
   }
 };
+
+export const loginRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: "Too many login attempts, please try again later",
+  standardHeaders: true,
+  legacyHeaders: false,
+});

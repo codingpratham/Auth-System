@@ -3,6 +3,7 @@ import { prisma } from "../utils/prisma.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import { sendMail } from "../utils/mailer.js";
 
 export const Register = async (req: Request, res: Response): Promise<void> => {
   const { email, password, name } = req.body;
@@ -222,6 +223,131 @@ export const profile = async (req: Request, res: Response): Promise<void> => {
     res.status(200).json({
       message: "Profile fetched successfully",
       user,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
+export const forgetPassword = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const { email } = req.body;
+
+  if (!email) {
+    res.status(411).json({
+      message: "input field is missing",
+    });
+    return;
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      res.status(404).json({
+        message: "User not found",
+      });
+      return;
+    }
+
+    const resetToken = crypto.randomBytes(40).toString("hex");
+
+    await prisma.passwordResetToken.create({
+      data: {
+        token: resetToken,
+        userId: user.id,
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+      },
+    });
+
+    const resetLink = `http://localhost:3000/api/v1/auth/reset-password?token=${resetToken}`;
+
+    await sendMail(
+      user.email,
+      "Reset Password",
+      `
+      <h2>Password Reset</h2>
+      <p>Click below to reset your password:</p>
+      <a href="${resetLink}">${resetLink}</a>
+      <p>This link expires in 10 minutes.</p>
+    `,
+    );
+
+    res.status(200).json({
+      message: "Reset link sent successfully",
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
+export const resetPassword = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const token = req.query.token as string;
+  const { password } = req.body;
+
+  if (!token || !password) {
+    res.status(400).json({
+      message: "Input field is missing",
+    });
+    return;
+  }
+
+  if (password.length < 6) {
+    res.status(400).json({
+      message: "Password must be at least 6 characters",
+    });
+    return;
+  }
+
+  try {
+    const stored = await prisma.passwordResetToken.findUnique({
+      where: { token },
+    });
+
+    if (!stored) {
+      res.status(400).json({
+        message: "Invalid reset token",
+      });
+      return;
+    }
+
+    if (stored.expiresAt < new Date()) {
+      res.status(403).json({
+        message: "Reset token expired",
+      });
+      return;
+    }
+
+    const hashed = await bcrypt.hash(password, 10);
+
+    await prisma.user.update({
+      where: { id: stored.userId },
+      data: { password: hashed },
+    });
+
+    await prisma.passwordResetToken.delete({
+      where: { token },
+    });
+
+    await prisma.passwordResetToken.deleteMany({
+      where: { userId: stored.userId },
+    });
+
+    res.status(200).json({
+      message: "Password reset successful",
     });
   } catch (error) {
     console.error(error);
