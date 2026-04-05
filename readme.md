@@ -33,3 +33,10 @@ Access Token Expired
 
 Logout / Password Reset
 → Refresh tokens deleted
+```
+
+## API Documentation
+
+Interactive API documentation is available at:
+
+→ [http://localhost:3000/api-docs](http://localhost:3000/api-docs)
